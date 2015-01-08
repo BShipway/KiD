@@ -60,7 +60,9 @@ module stepfields
            theta(:,:)=theta(:,:)+dtheta_mphys(:,:)*field_mask(:,:)*dt
         endif
         ! divergence part
-        theta(:,:)=theta(:,:)+dtheta_div(:,:)*field_mask(:,:)*dt
+        if (.not. l_noadv_theta) then
+           theta(:,:)=theta(:,:)+dtheta_div(:,:)*field_mask(:,:)*dt
+        endif
         ! forced part
         theta(:,:)=theta(:,:)+Tforce(:,:)*exner(:,:)*field_mask(:,:)*dt
         ! surface value

@@ -19,6 +19,7 @@ MODULE MODULE_MP_MORR_TWO_MOMENT
   Use diagnostics, only: save_dg, i_dgtime
 ! KiD 
   Use parameters, only: nx
+  Use namelists, only: set_Nc
 ! KiD
 
    IMPLICIT NONE
@@ -193,8 +194,8 @@ SUBROUTINE MORR_TWO_MOMENT_INIT
 
 ! FOR INUM = 1, SET CONSTANT DROPLET CONCENTRATION (UNITS OF CM-3)
 
-      NDCNST = 100.
-
+      ! NDCNST = 100.
+       NDCNST = set_Nc
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! NOTE, FOLLOWING OPTIONS NOT AVAILABLE IN CURRENT VERSION
 ! ONLY USED WHEN INUM=0
@@ -806,6 +807,9 @@ END SUBROUTINE MP_MORR_TWO_MOMENT
 ! MODEL INPUT PARAMETERS (FORMERLY IN COMMON BLOCKS)
 
         REAL DT         ! MODEL TIME STEP (SEC)
+
+! KiD : precipitation rate at each level
+        REAL :: precip_level(kts:kte)
 
 !.....................................................................................................
 ! LOCAL VARIABLES: ALL PARAMETERS BELOW ARE LOCAL TO SCHEME AND DON'T NEED TO COMMUNICATE WITH THE
@@ -3259,6 +3263,12 @@ END SUBROUTINE MP_MORR_TWO_MOMENT
         SNOWRT = SNOWRT+(FALOUTS(KTS)+FALOUTI(KTS)+FALOUTG(KTS))*DT/NSTEP
 
       END DO
+!KiD : setprecip rate at each level
+      do k = kts,kte
+         precip_level(k) = (FALOUTR(K)+FALOUTC(K)+FALOUTS(K)+FALOUTI(K)+FALOUTG(K))  &
+                     *DT/NSTEP
+      enddo
+
 
         DO K=KTS,KTE
 
@@ -3649,6 +3659,7 @@ END SUBROUTINE MP_MORR_TWO_MOMENT
          call save_dg(k, nsubc(k), 'nsubc', i_dgtime, units='kg/kg/s')
          call save_dg(k, nprc(k), 'nprc', i_dgtime, units='kg/kg/s')
          call save_dg(k, nprc1(k), 'nprc1', i_dgtime, units='kg/kg/s')
+         call save_dg(k, precip_level(k), 'precip_level', i_dgtime, units='kg/kg/s')
       else 
          call save_dg(k,ite, pra(k), 'pra', i_dgtime, units='kg/kg/s')
          call save_dg(k,ite, pre(k), 'pre', i_dgtime, units='kg/kg/s')

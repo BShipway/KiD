@@ -48,6 +48,11 @@ module namelists
   logical :: iiwarm=.false.
   character(200) :: KiD_outdir=''
   character(200) :: KiD_outfile=''
+  real :: set_Nc = 100.  ! for setting cloud number concentration (cm-3)
+  real :: amp_fact= 1.0 ! factor applied to the amplitude of the Cu velocity
+                        ! field to obtain different clouds. Default is
+                        ! the standard case  	 	 
+  real :: cltop=2700.   ! cloud top for the standard Cu case  	 	 
 
   namelist/addcontrol/iiwarm, KiD_outdir, KiD_outfile  &
 #if SHIPWAY_MICRO == 1
@@ -64,7 +69,10 @@ module namelists
      , l_active_inarg2000, iopt_inuc, l_cu_cold, l_oneway, l_newoptions &
 #endif
      ! Thompson 09...
-     , l_reuse_thompson_lookup
+     , l_reuse_thompson_lookup &
+     ! Flags for KiD-A intercomparison
+     , set_Nc, amp_fact, cltop
+  
 
   ! Namelist input...
 

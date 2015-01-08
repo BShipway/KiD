@@ -42,7 +42,7 @@ module advection_interface
     allocate(field(nz,0:nx+1))
     allocate(field_adv(nz,0:nx+1))
 
-    if (.not. l_fix_theta)then
+    if (.not. l_fix_theta .and. .not. l_noadv_theta)then
   
        field(:,:)=theta(:,:)
     ! Temperature perturbation

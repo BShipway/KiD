@@ -31,7 +31,8 @@ contains
     real :: pptrain_2d(nx), pptsnow_2d(nx), pptgraul_2d(nx) &
          , pptice_2d(nx)    
     real :: t1d(nz), p1d(nz), dz1d(nz),qv1d(nz),qc1d(nz) &
-         ,qr1d(nz), qi1d(nz), ni1d(nz), qs1d(nz), qg1d(nz)
+         ,qr1d(nz), qi1d(nz), ni1d(nz), qs1d(nz), qg1d(nz) &
+         ,nr1d(nz)
 
     integer :: kts, kte, i, j, k
 
@@ -57,6 +58,8 @@ contains
           qr1d(k) = hydrometeors(k,i,2)%moments(1,1) & 
                + (dhydrometeors_adv(k,i,2)%moments(1,1) &
                + dhydrometeors_div(k,i,2)%moments(1,1))*dt 
+
+          nr1d(k) = 0.0
           
           qi1d(k) = hydrometeors(k,i,3)%moments(1,1) & 
                + (dhydrometeors_adv(k,i,3)%moments(1,1) &
@@ -83,7 +86,7 @@ contains
        end if
        
        
-       call mp_thompson(qv1d, qc1d, qi1d, qr1d, qs1d, qg1d, ni1d, &
+       call mp_thompson(qv1d, qc1d, qi1d, qr1d, qs1d, qg1d, ni1d, nr1d, &
             t1d, p1d, dz1d,                                       &
             pptrain, pptsnow, pptgraul, pptice,                   &
             kts, kte, dt, i, j)

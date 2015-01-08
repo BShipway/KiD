@@ -146,6 +146,7 @@ contains
           else
              w_t(:,:,itime)=0
           end if
+
           do j = 0, nx+1 
             call interpolate(z,w_t(:,j,itime),z_half,w_t_half(:,j,itime),scheme_id=1) 
           enddo

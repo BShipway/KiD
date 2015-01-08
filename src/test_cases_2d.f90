@@ -26,6 +26,7 @@ module test_cases_2d
   Use switches
   Use class_species, only: species_allocate
   Use test_cases, only: allocate_forcing, z2exner, set_standard_profile 
+  Use namelists, only: amp_fact, set_Nc
 
   Use aerosols, only: moment_logn, awp=>wp, set_aerosol
 
@@ -92,11 +93,13 @@ contains
        if (all(zctrl==0.))zctrl(1)=3000.
        if (all(tctrl==0.))tctrl(1)=3600.
        if (all(xctrl==0.))xctrl(1)=9000.
+       if (all(wctrl==0.))wctrl(1)=1.0
        if (ipctrl==0)ipctrl=1
 
        maxZ=zctrl(1)
        maxX=xctrl(1)
        maxT=tctrl(1)
+       maxW=wctrl(1)
        n_times=int(maxT/dt)
 
        n_force_times=int(maxT/100.0)
@@ -105,7 +108,7 @@ contains
 
        call allocate_forcing(nz,nx,n_force_times)
 
-       call set_2D_Cu_wind_field(maxZ, maxX, n_force_times)
+       call set_2D_Cu_wind_field(maxW, maxZ, maxX, n_force_times)
 
        do ih=1,naerosol
          indices(ih)=ih
@@ -697,7 +700,7 @@ contains
 
     select case(ip)
     case (1) 
-      call set_2D_Cu_wind_field(maxZ, maxX, n_times)
+      call set_2D_Cu_wind_field(1._wp,maxZ, maxX, n_times)
     case (2)
       call set_2D_Sc_wind_field(1._wp, maxZ, maxX, n_times)
     case (3)
@@ -705,12 +708,12 @@ contains
     case (4)
       call set_2D_Sc_wind_field(1._wp, maxZ, maxX, n_times)
     case default
-       call set_2D_Cu_wind_field(maxZ, maxX, n_times)
+       call set_2D_Cu_wind_field(1._wp, maxZ, maxX, n_times)
     end select
 
   end subroutine set_2D_wind_field
 
-  subroutine set_2D_Cu_wind_field(maxZ, maxX, n_times)
+  subroutine set_2D_Cu_wind_field(maxW, maxZ, maxX, n_times)
     !
     ! Set up the 2D wind field for cumulus based on 
     ! Morrison and Grabowski (2007) 
@@ -718,7 +721,7 @@ contains
     ! Using formulation described in Appendix of
     ! MG07
 
-    real(wp), intent(in) :: maxZ, maxX
+    real(wp), intent(in) :: maxZ, maxX, maxW
     integer, intent(in) :: n_times
 
     !local variables
@@ -771,7 +774,8 @@ contains
     ! AMP2A AND AMP2B CONTROL THE TEMPORAL FLUCTUATIONS OF SHEAR (TILT)
     ! TSCALE1 AND TSCALE2 ARE PERIODS OF COSINE FLUCTUATIONS OF THE ABOVE
 
-    AMPL0=1.0
+    ! AMPL0=1.0 original value
+    AMPL0=maxW
     AMPL20=0.
     XSCALE0=1.8*1.e3
     AMPA=3.5
@@ -932,17 +936,18 @@ contains
     real(wp) :: ampl, ztop, x0, xcen
     
     ! CALCULATE X AND Z DISTANCES (IN METERS)
-    dzp(1:nz) = dz_half(1:nz)
-    dzp(nz+1) = dz_half(nz)
+    dzp(1:nz) = dz(1:nz)
+    dzp(nz+1) = dz(nz)
     
-    dxp(1:nx) = dx_half(1:nx)
-    dxp(nx+1) = dx_half(nx)
+    dxp(1:nx) = dx(1:nx)
+    dxp(nx+1) = dx(nx)
 
-    zp(1)=z_half(1)-dzp(1)
-    zp(2:nz+1) = z_half(1:nz)
-
-    xp(1)=x_half(0)-dxp(1)
-    xp(2:nx+1) = x_half(1:nx)
+    do k=1,nz+1
+       zp(k)=(k-1)*dzp(k)
+    enddo
+    do i=1,nx+1
+       xp(i)=(i-1)*dxp(i)
+    enddo
 
     XSCALE=xp(nx+1)
     ZSCALE=zp(nz)
@@ -964,7 +969,7 @@ contains
     X0=(xp(nx+1)-XSCALE)/2.
     phi = 0.0
     DO I=1,NX+1
-       DO K=1,NZ-1
+       DO K=1,NZ
           PHI(i,k)=-cos(2.*pi*(xp(i)-X0)/XSCALE)* &
                sin(pi*zp(k)/ZSCALE)
           PHI(i,k)=PHI(i,k)*AMPL*rho(k)
@@ -978,12 +983,12 @@ contains
        !  calculate rho*vel by derivation of streamfunction and normalize
        !  rho*ux velocity:
        do i=1,nx+1
-          do k=1,nz-2
+          do k=1,nz
              ux(i,k)=-(phi(i,k+1)-phi(i,k))/dzp(k)*dt/dxp(i)
           enddo
        enddo
        !  rho*uz velocity
-       do k=1,nz-1
+       do k=1,nz
           do i=1,nx
              uz(i,k)=(phi(i+1,k)-phi(i,k))/dxp(i)*dt/dzp(k)
           enddo
@@ -991,7 +996,7 @@ contains
        ! ****CHECK RHO CALC****
        ! velocity fields
        do i=1,nx
-          do k=1,nz-2
+          do k=1,nz
              v_t(k,i,itime)=0.5*(ux(i,k)+ux(i+1,k))/dt*dxp(i) /rho(k)
              w_t(k,i,itime)=0.5*(uz(i,k)+uz(i,k+1))/dt*dzp(k) /rho(k)
           end do

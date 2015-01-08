@@ -131,6 +131,6 @@ module parameters
    ! if using bin microphysics set variable below to 
    ! determine the last bin of cloud
    ! if not using bin, this value is ignored
-   integer :: split_bins = 15
+   !integer :: split_bins = 15
 
 end module parameters

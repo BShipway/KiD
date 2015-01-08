@@ -5,3 +5,5 @@ obj/
 *.mod
 .includes
 case.used
+#*
+.#*

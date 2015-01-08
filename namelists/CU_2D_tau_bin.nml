@@ -20,9 +20,10 @@ icase=601
 
 &control
 mphys_scheme='tau_bin'
-dt=1.0
+dt=2.0
 dgstart=0.0
-dg_dt=100.0
+dg_dt=30.0
+wctrl(1)=2.0
 tctrl(1)=3600.
 /
 
@@ -36,4 +37,5 @@ l_periodic_bound=.False.
 
 &addcontrol
 iiwarm=.True.
+set_Nc=50.
 /

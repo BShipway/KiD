@@ -64,6 +64,12 @@ Module diagnostics
      real(wp), pointer :: data(:,:,:) 
   end type diag_bin2DTS
 
+  type, public :: diag_bin3DTS   ! Holds 2D bin-height timeseries data
+     character(max_char_len) :: name, units, longname
+     character(max_char_len) :: dim
+     real(wp), pointer :: data(:,:,:,:) 
+  end type diag_bin3DTS
+
   type, public :: dgIDarray
      type(dgID) :: dgIDs(max_dgs)
      integer    :: nIds=0
@@ -76,7 +82,7 @@ Module diagnostics
   type(diagScalarTS), target :: scalars(max_dgs) ! Instantaneous scalars
   type(diagBinData), target :: binData(max_dgs) ! bin data  
   type(diag_bin2DTS), target :: instant_bindgs(max_dgs) ! Instantaneous bin diags
-
+  type(diag_bin3DTS), target :: instant_2Dbindgs(max_dgs) ! Instantaneous bin diags
 
   type(dgIDarray), save, target :: ID_instant_column
   type(dgIDarray), save, target :: ID_instant_nx 
@@ -84,13 +90,14 @@ Module diagnostics
   type(dgIDarray), save, target :: ID_scalars
   type(dgIDarray), save, target :: ID_binData
   type(dgIDarray), save, target :: ID_instant_bindgs
+  type(dgIDarray), save, target :: ID_instant_2Dbindgs
 
   integer :: maxn_dgtimes=0
   
   interface allocate_dgs
      module procedure allocate_dgs_1DTS, allocate_dgs_2DTS, &
           allocate_dgs_ScalarTS, allocate_dgs_bindata, &
-          allocate_dgs_bindgs
+          allocate_dgs_bindgs, allocate_dgs_bindgs_2d
   end interface
 
   interface save_dg
@@ -99,21 +106,23 @@ Module diagnostics
         save_dg_1D_range_sp, save_dg_scalar_sp, save_dg_1D_range_dp, &
         save_dg_1D_dp, save_dg_1D_point_dp, save_dg_scalar_dp,       &
         save_dg_2D_point_sp, save_dg_2D_point_dp,                    &
-        save_dg_2D_sp, save_dg_2D_dp,                                &
-        save_dg_bin_sp, save_dg_bin_dp
+        save_dg_2D_sp, save_dg_2D_dp !,                                &
+       ! save_dg_bin_sp, save_dg_bin_dp
 
   end interface
 
-  interface save_dg_2d
-
-     module procedure save_dg_2D_point_sp, save_dg_2D_point_dp,      &
-        save_dg_2D_sp, save_dg_2D_dp                                
-
-  end interface
+!!$  interface save_dg_2d
+!!$
+!!$     module procedure save_dg_2D_point_sp, save_dg_2D_point_dp,      &
+!!$        save_dg_2D_sp, save_dg_2D_dp                                
+!!$
+!!$  end interface
 
   interface save_binData
 
-     module procedure save_binData_sp, save_binData_dp
+     module procedure save_binData_sp, save_binData_dp,              &
+          save_dg_bin_sp, save_dg_bin_dp,                            &
+          save_dg_2d_bin_sp, save_dg_2d_bin_dp
 
   end interface
 
@@ -149,9 +158,13 @@ contains
     real(wp), allocatable :: field_nx(:)   
     real(wp), allocatable :: field_bin_c(:)
     real(wp), allocatable :: field_bin_r(:)
-    real(wp), allocatable :: field_bin(:,:)
+    real(wp), allocatable :: field2d(:,:)
     character(max_char_len) :: name, units, dims
-    integer :: k, ih, imom, ibin
+    integer :: k, ih, imom, ibin, split_bins
+    character(4) :: bin_name(5) = &
+       (/ '20um', '25um', '32um', '40um', '50um' /)
+    real :: auto_bin(34)
+    integer :: ll   
 
     if (.not. l_dgstep) return
 
@@ -163,7 +176,7 @@ contains
     allocate(field_nx(0:nx+1))    
     allocate(field_bin_c(nz))
     allocate(field_bin_r(nz))
-    allocate(field_bin(nz,max_nbins))
+    allocate(field2d(nz,max_nbins))
     
     ! set dimensions for the diagnostic column or grid output, i.e. 
     ! 1-D set-up is dimensioned with column - 'z'
@@ -197,36 +210,49 @@ contains
        end do
     end do
     
-    !hydrometeors
+       !hydrometeors
     do ih=1,nspecies
-       do imom=1,num_h_moments(ih)
-          name=trim(h_names(ih))//'_'//trim(mom_names(imom))
-          units=trim(mom_units(imom))
+       do imom=1,num_h_moments(ih)   
           do k=1,nz
              field(k)=sum(hydrometeors(k,nx,ih)%moments(:,imom))
-             if (num_h_bins(ih) > 1) then
-                field_bin_c(k) = sum(hydrometeors(k,nx,ih)%moments(1:split_bins,imom))
-                field_bin_r(k) = sum(hydrometeors(k,nx,ih)%moments(split_bins+1:max_nbins,imom))
-             endif
           end do
-          call save_dg(field, name, i_dgtime,  units,dim=dims)          
-
-          if (num_h_bins(ih) > 1) then
-             name=trim('cloud_only_'//trim(mom_names(imom)))          
-             call save_dg(field_bin_c, name, i_dgtime, units, dim=dims)
-             name=trim('rain_only_'//trim(mom_names(imom)))          
-             call save_dg(field_bin_r, name, i_dgtime, units, dim=dims)
+          name=trim(h_names(ih))//'_'//trim(mom_names(imom))
+          units=trim(mom_units(imom))
+          call save_dg(field, name, i_dgtime,  units,dim='z')
+          if (num_h_bins(ih) > 1)then
              do ibin= 1,num_h_bins(ih)
-                field_bin(:,ibin) = 0.0
                 do k=1,nz
-                   field_bin(k,ibin) = hydrometeors(k,nx,ih)%moments(ibin,imom)
-                end do
-             end do
-             name=trim(h_names(ih))//'_bin_'//trim(mom_names(imom))
-             call save_dg('bin',field_bin, name, i_dgtime,  units,dim=dims)     
-          end if
+                   field2d(k,ibin) = hydrometeors(k,nx,ih)%moments(ibin,imom)
+                enddo
+              end do
+              name=trim(h_names(ih))//'_bin_'//trim(mom_names(imom))
+              call save_binData(field2d, name, i_dgtime,  units,dim='z,bin')     
+           end if
        end do
     end do
+    !bulk cloud rain diag for bin micro
+    !AH - remove species loop as this will break 
+    !     if more than one species used
+    !  do ih=1,nspecies
+    if (num_h_bins(1) > 1)then
+       do ll = 1,5
+          split_bins = ll+11
+          do imom=1,num_h_moments(1)
+             do k=1,nz
+                field_bin_c(k)=sum(hydrometeors(k,nx,1)%moments &
+                     (1:split_bins,imom))
+                field_bin_r(k)=sum(hydrometeors(k,nx,1)%moments &
+                     (split_bins+1:max_nbins,imom))
+             end do
+             name=trim('cloud_')//trim(mom_names(imom))//'_'//trim(bin_name(ll))
+             units=trim(mom_units(imom))
+             call save_dg(field_bin_c, name, i_dgtime,  units,dim='z')
+             name=trim('rain_')//trim(mom_names(imom))//'_'//trim(bin_name(ll))
+             units=trim(mom_units(imom))
+             call save_dg(field_bin_r, name, i_dgtime,  units,dim='z')
+          enddo
+       enddo
+    endif
 
     !========================================================
     ! Tendency terms
@@ -410,24 +436,25 @@ contains
     
     do ih=1,nspecies
        if (num_h_bins(ih) > 1)then
-          field_bin_c(:)=0.0
-          field_bin_r(:)=0.0
-          do k=1,nz
-             field_bin_c(k)= sum(rho(k)*dz(k)* &
-                  hydrometeors(k,nx,ih)%moments(1:split_bins,1))
-             field_bin_r(k)= field_bin_r(k) + &
-                  sum(rho(k)*dz(k)* &
-                  hydrometeors(k,nx,ih)%moments(split_bins+1:max_nbins,1))
+          do ll = 1, 5
+             split_bins = ll + 1
+             do k=1,nz
+                field_bin_c(k)=sum(rho(k)*dz(k)*hydrometeors(k,nx,ih)%moments &
+                     (1:split_bins,1))
+                field_bin_r(k)=sum(rho(k)*dz(k)*hydrometeors(k,nx,ih)%moments &
+                     (split_bins+1:max_nbins,1))
+             enddo
+             name='cloud_water_path'//'_'//trim(bin_name(ll))
+             call save_dg(sum(field_bin_c), name,&
+                  i_dgtime, units='kg/m2',dim='time')
+             name='rain_water_path'//'_'//trim(bin_name(ll))
+             call save_dg(sum(field_bin_r), name,&
+                  i_dgtime, units='kg/m2',dim='time')
           enddo
-
-          call save_dg(sum(field_bin_c), 'cloud_water_path',&
-               i_dgtime, units='kg/m2',dim='time')
-          call save_dg(sum(field_bin_r), 'rain_water_path',&
-               i_dgtime, units='kg/m2',dim='time')
        endif
     enddo
 
-    deallocate(field_bin)
+    deallocate(field2d)
     deallocate(field)
     deallocate(field_nx)    
     deallocate(field_bin_c)
@@ -445,6 +472,8 @@ contains
 
   subroutine save_diagnostics_2d
 
+    ! array for 2-D bin diagnostics
+    real(wp), allocatable :: field_bin_2D(:,:,:)
     ! arrays for the 2-D diagnostics
     real(wp), allocatable :: field_nx(:)
     real(wp), allocatable :: field_2D(:,:)
@@ -456,17 +485,25 @@ contains
     real(wp), allocatable :: field_bin_r(:)
 
     character(max_char_len) :: name, units, dims
-    integer :: k, ih, imom, ibin
+    integer :: k, ih, imom, ibin, split_bins
+    character(4) :: bin_name(5) = &
+       (/ '20um', '25um', '32um', '40um', '50um' /)
+    real :: auto_bin(34)
+    integer :: ll
 
     if (.not. l_dgstep) return
 
+    !
+    ! Instantaneous bin diags for a 2-D run
+    !
+    allocate(field_bin_2D(nz,1:nx,max_nbins))
     !
     ! Instantaneous grid diags for a 2-D run
     !
     allocate(field_nx(0:nx+1))    
     allocate(field_2D(nz,1:nx))
     allocate(field_bin_c_2d(nz,1:nx))
-    allocate(field_bin_r_2d(nz,1:nx))   
+    allocate(field_bin_r_2d(nz,1:nx))
     !
     ! Instantaneous horizontally averged diags for a scalar diags
     !    
@@ -516,31 +553,54 @@ contains
        do imom=1,num_h_moments(ih)
           name=trim(h_names(ih))//'_'//trim(mom_names(imom))
           units=trim(mom_units(imom))
-          do k=1,nz
-             do j=1,nx
+          do j=1,nx
+             do k=1,nz
                 field_2D(k,j)=sum(hydrometeors(k,j,ih)%moments(:,imom))
-                if (num_h_bins(ih) > 1) then
-                   field_bin_c_2D(k,j) =                                            &
-                        sum(hydrometeors(k,j,ih)%moments(1:split_bins,imom))
-                   field_bin_r_2D(k,j) =                                            &
-                        sum(hydrometeors(k,j,ih)%moments(split_bins+1:max_nbins,imom))
-                endif
-             end do
-          end do
-          call save_dg(field_2D(1:nz,1:nx), name, i_dgtime,  units,dim=dims)          
-
+             enddo
+          enddo          
           name=trim(h_names(ih))//'_'//trim(mom_names(imom))  
-          call save_dg(field_2D(1:nz,1:nx), name, i_dgtime, units, dim=dims)
-          
+          call save_dg(field_2D(1:nz,1:nx), name, i_dgtime, units, dim=dims)          
+     ! save 2D fields for each bin     
           if (num_h_bins(ih) > 1) then
-             name=trim('cloud_only_'//trim(mom_names(imom)))          
-             call save_dg(field_bin_c_2D(1:nz,1:nx), name, i_dgtime, units, dim=dims)
-             name=trim('rain_only_'//trim(mom_names(imom)))          
-             call save_dg(field_bin_r_2D(1:nz,1:nx), name, i_dgtime, units, dim=dims) 
+             do ibin= 1,num_h_bins(ih)
+                do j=1,nx
+                   do k=1,nz 
+                      field_bin_2d(k,j,ibin) = hydrometeors(k,j,ih)%moments(ibin,imom)
+                   enddo
+                enddo
+             enddo
+             name=trim(h_names(ih))//'_bin_'//trim(mom_names(imom))
+             call save_binData(field_bin_2d, name, i_dgtime,  units,dim='z,bin') 
           endif
        enddo
     enddo
-
+    do ih=1,nspecies
+       if (num_h_bins(ih) > 1)then
+          do ll = 1,5
+             split_bins = ll+11
+             do imom=1,num_h_moments(ih)
+                do j=1,nx
+                   do k=1,nz
+                      field_bin_c_2d(k,j)=sum(hydrometeors(k,j,ih)%moments &
+                           (1:split_bins,imom))
+                      field_bin_r_2d(k,j)=sum(hydrometeors(k,j,ih)%moments &
+                           (split_bins+1:max_nbins,imom))
+                   end do
+                end do
+                if (ih == 1) then
+                   name=trim('cloud_')//trim(mom_names(imom))//'_'//trim(bin_name(ll))
+                   units=trim(mom_units(imom))
+                   call save_dg(field_bin_c_2d(1:nz,1:nx), name, i_dgtime,  units,dim='z')
+                   name=trim('rain_')//trim(mom_names(imom))//'_'//trim(bin_name(ll))
+                   units=trim(mom_units(imom))
+                   call save_dg(field_bin_r_2d(1:nz,1:nx), name, i_dgtime,  units,dim='z')
+                else
+                   print *, 'bulk fields from bin not coded for ice, snow and graupel'
+                endif
+             end do
+          end do
+       endif
+    end do
     !========================================================
     ! Tendency terms
     !========================================================
@@ -837,7 +897,21 @@ contains
     allocate(dgStore%data(nz, max_nbins, maxn_dgtimes))    
     dgStore%data=unset_real    
 
-  end subroutine allocate_dgs_bindgs    
+  end subroutine allocate_dgs_bindgs 
+
+   subroutine allocate_dgs_bindgs_2d(dgStore)
+
+    type(diag_bin3dTS), intent(inout) :: dgStore  
+    integer :: n_offset, n_dgtimes 
+
+    n_offset = dgstart/dt-1 
+    n_dgtimes = n_times - n_offset   
+
+    maxn_dgtimes=max(maxn_dgtimes, int(n_dgtimes*dt/dg_dt)+1)
+    allocate(dgStore%data(nz, nx, max_nbins, maxn_dgtimes))    
+    dgStore%data=unset_real    
+
+  end subroutine allocate_dgs_bindgs_2d  
 
   subroutine allocate_dgs_ScalarTS(dgStore)
 
@@ -1534,12 +1608,12 @@ contains
 
   end subroutine save_dg_scalar_dp
 
-  subroutine save_dg_bin_sp(bin, field, name, itime, units, &
+  subroutine save_dg_bin_sp(field, name, itime, units, &
      dim, longname)
     
     real(sp), intent(in) :: field(:,:)
     character(*), intent(in) :: name
-    character(*), intent(in) :: bin  
+    !character(*), intent(in) :: bin  
     integer, intent(in) :: itime
     character(*), intent(in), optional :: units, dim, longname
 
@@ -1589,12 +1663,12 @@ contains
     
   end subroutine save_dg_bin_sp
 
-  subroutine save_dg_bin_dp(bin, field, name, itime, units, &
+  subroutine save_dg_bin_dp(field, name, itime, units, &
      dim, longname)
     
     real(dp), intent(in) :: field(:,:)
     character(*), intent(in) :: name
-    character(*), intent(in) :: bin  
+    !character(*), intent(in) :: bin  
     integer, intent(in) :: itime
     character(*), intent(in), optional :: units, dim, longname
 
@@ -1643,6 +1717,114 @@ contains
     dg(ivar)%data(:,:,itime)=field(:,:)
     
   end subroutine save_dg_bin_dp
+
+subroutine save_dg_2d_bin_sp(field, name, itime, units, &
+     dim, longname)
+    
+    real(sp), intent(in) :: field(:,:,:)
+    character(*), intent(in) :: name
+    integer, intent(in) :: itime
+    character(*), intent(in), optional :: units, dim, longname
+
+    !local variables
+    type(diag_bin3DTS), pointer :: dg(:)
+    type(dgIDarray), pointer  :: dg_index
+    character(max_char_len):: cunits, cdim, clongname
+    integer :: ivar
+
+    if (.not. l_dgstep) return
+
+    ! We're assuming diagnostics are instant for now
+    ! could put in an optional argument later to do 
+    ! averaged, accumulated, etc. later.
+    dg=>instant_2Dbindgs
+    dg_index=>ID_instant_2Dbindgs
+    
+    if (present(units))then
+       cunits=units
+    else
+       cunits='Not set'
+    end if
+
+    if (present(dim))then
+       cdim=dim
+    else
+       cdim='z'
+    end if
+
+    if (present(longname))then
+       clongname=longname
+    else
+       clongname=name
+    end if
+
+    call getUniqueId(name, dg_index, ivar)
+
+    if (.not. associated(dg(ivar)%data)) then
+       call allocate_dgs(dg(ivar))
+       dg(ivar)%name=name
+       dg(ivar)%units=trim(cunits)
+       dg(ivar)%dim=trim(cdim)
+       dg(ivar)%longname=trim(clongname)
+    end if
+    
+    dg(ivar)%data(:,:,:,itime)=field(:,:,:)
+    
+  end subroutine save_dg_2d_bin_sp
+
+subroutine save_dg_2d_bin_dp(field, name, itime, units, &
+     dim, longname)
+    
+    real(dp), intent(in) :: field(:,:,:)
+    character(*), intent(in) :: name
+    integer, intent(in) :: itime
+    character(*), intent(in), optional :: units, dim, longname
+
+    !local variables
+    type(diag_bin3DTS), pointer :: dg(:)
+    type(dgIDarray), pointer  :: dg_index
+    character(max_char_len):: cunits, cdim, clongname
+    integer :: ivar
+
+    if (.not. l_dgstep) return
+
+    ! We're assuming diagnostics are instant for now
+    ! could put in an optional argument later to do 
+    ! averaged, accumulated, etc. later.
+    dg=>instant_2Dbindgs
+    dg_index=>ID_instant_2Dbindgs
+    
+    if (present(units))then
+       cunits=units
+    else
+       cunits='Not set'
+    end if
+
+    if (present(dim))then
+       cdim=dim
+    else
+       cdim='z'
+    end if
+
+    if (present(longname))then
+       clongname=longname
+    else
+       clongname=name
+    end if
+
+    call getUniqueId(name, dg_index, ivar)
+
+    if (.not. associated(dg(ivar)%data)) then
+       call allocate_dgs(dg(ivar))
+       dg(ivar)%name=name
+       dg(ivar)%units=trim(cunits)
+       dg(ivar)%dim=trim(cdim)
+       dg(ivar)%longname=trim(clongname)
+    end if
+    
+    dg(ivar)%data(:,:,:,itime)=field(:,:,:)
+    
+  end subroutine save_dg_2d_bin_dp
 
   subroutine save_binData_sp(field, name, units, &
        longname)
@@ -1739,14 +1921,16 @@ contains
     character(max_char_len) :: outfile, nmlfile, outdir, name
 
     ! Local variables    
-    integer :: ivar, itmp=1, offset=3, n_dgs, k, iq, tim
+    integer :: ivar, itmp=1, offset=3, n_dgs, k, iq, tim, ibin
     character(4) :: char4
     
     ! netcdf variables
     integer :: status, ncid, zid, xid, timeid, binsid
-    integer :: tzdim(2), txdim(2), tzldim(3), tzxdim(3), dim, dim2d(2), dim3d(3)
+    integer :: tzdim(2), txdim(2), tzldim(3), tzxdim(3), tzxbindim(4)  & 
+        ,dim, dim2d(2), dim3d(3), dim4d(4) 
     integer, allocatable :: varid(:)
     real, allocatable :: field3d(:,:,:)
+    real, allocatable :: field4d(:,:,:,:)
     
     write(6,*) 'Integration complete.'
 
@@ -1819,6 +2003,7 @@ contains
     txdim=(/ timeid, xid /)
     tzldim=(/ timeid, binsid, zid /)
     tzxdim=(/ timeid, xid, zid /)
+    tzxbindim=(/ timeid, binsid, xid, zid /)
 
     ! Do the dim variables
     n_dgs=2
@@ -2019,6 +2204,49 @@ contains
        enddo
 
        deallocate(field3d)
+
+       deallocate(varid)
+
+       ! Do the instantaneous bin micro diags (2D)
+       n_dgs=ID_instant_2Dbindgs%nids
+       allocate(varid(n_dgs))
+       status=nf90_redef(ncid)
+       dim4d=tzxbindim
+
+       do ivar=1,n_dgs
+          status=nf90_def_var(ncid, instant_2Dbindgs(ivar)%name &
+               , nf90_float, dim4d, varid(ivar))
+          call check_ncstatus(status)
+          status=nf90_put_att(ncid, varid(ivar),        &
+               'units', instant_2Dbindgs(ivar)%units)
+          status=nf90_put_att(ncid, varid(ivar),        &
+               'dim', instant_2Dbindgs(ivar)%dim)
+          status=nf90_put_att(ncid, varid(ivar),        &
+               'missing_value', unset_real)
+       end do
+       
+       status=nf90_enddef(ncid)
+
+       allocate(field4d(n_dgtimes, max_nbins, nx, nz))
+       
+       do ivar=1,n_dgs
+          do tim=1,n_dgtimes
+             do ibin= 1,max_nbins 
+                do j = 1, nx
+                   do k = 1,nz
+                      field4d(tim,ibin,j,k)= field_mask(k,j)*instant_2Dbindgs(ivar)%data(k,j,ibin,tim) &
+                           +(1.-field_mask(k,j))*unset_real 
+                   enddo
+                enddo
+             enddo
+          enddo
+          status=nf90_put_var(ncid, varid(ivar), field4d)
+
+          call check_ncstatus(status)
+
+       enddo
+
+       deallocate(field4d)
 
        deallocate(varid)
 

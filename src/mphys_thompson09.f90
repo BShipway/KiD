@@ -29,7 +29,7 @@ contains
     
     real :: pptrain, pptsnow, pptgraul, pptice
     real :: pptrain_2d(nx), pptsnow_2d(nx), pptgraul_2d(nx) &
-         , pptice_2d(nx)    
+         , pptice_2d(nx), pptrain_level(nz), pptrain_2d_prof(nz,nx)   
     real :: t1d(nz), p1d(nz), dz1d(nz),qv1d(nz),qc1d(nz) &
          ,qr1d(nz), qi1d(nz), ni1d(nz), qs1d(nz), qg1d(nz) &
          ,nr1d(nz)
@@ -100,7 +100,11 @@ contains
        call mp_thompson(qv1d, qc1d, qi1d, qr1d, qs1d, qg1d, ni1d, &
          nr1d, t1d, p1d, dz1d,                                       &
          pptrain, pptsnow, pptgraul, pptice,                   &
-         kts, kte, dt, i, j)
+! KiD specific diagnostic  
+         pptrain_level,                                        &
+! End KiD diag
+         kts, kte, dt, i, j)                                     
+         
        
        if (nx == 1) then
           ! Save some diagnostics
@@ -135,6 +139,10 @@ contains
           pptice_2d(i) = pptice
           pptsnow_2d(i) = pptsnow
           pptgraul_2d(i) = pptgraul
+          !
+          ! pptrain_level is declared and calced in 
+          ! the module module_mp_thompson09
+          pptrain_2d_prof(:,i) = pptrain_level(:)
        endif
        
 
@@ -214,7 +222,7 @@ contains
        call save_dg((pptice_2d+pptrain_2d+pptsnow_2d+pptgraul_2d)/nx, &
             name, i_dgtime, units, dim='time') 
        
-       ! save the all horizontal columns
+       ! save all horizontal columns
        imom=1
        !rain ppt
        ih=2
@@ -240,8 +248,11 @@ contains
        name='total_surface_ppt'
        units=trim(mom_units(imom))//' m'
        call save_dg((pptice_2d+pptrain_2d+pptsnow_2d+pptgraul_2d), &
-            name, i_dgtime, units, dim='time')        
-
+            name, i_dgtime, units, dim='time') 
+       !save precip flux at all levels and columns
+       name='total_ppt_level'
+       units=trim(mom_units(imom))//' m'
+       call save_dg(pptrain_2d_prof, name, i_dgtime,  units, dim='z,x')
     endif
     
   end Subroutine mphys_thompson09_interface
