@@ -2,3 +2,6 @@
 output/
 bin/
 obj/
+*.mod
+.includes
+case.used
