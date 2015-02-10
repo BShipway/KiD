@@ -134,7 +134,7 @@ contains
        if (all(xctrl==0.))xctrl(1)=800.
        if (all(wctrl==0.))wctrl(1)=1.0
        if (all(lhf_ctrl==0.))lhf_ctrl(1)=0.
-       if (all(lhf_ctrl==0.))shf_ctrl(1)=0.
+       if (all(shf_ctrl==0.))shf_ctrl(1)=0.
 
        if (ipctrl==0)ipctrl=4
 
